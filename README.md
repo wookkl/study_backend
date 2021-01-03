@@ -1,3 +1,5 @@
 # 신입 백엔드 개발자가 되기 위해 공부한 것들을 정리한 곳입니다.
 
-- javascript/
+## 분야별 링크
+
+- [Javascript](./javascript)
