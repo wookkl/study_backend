@@ -444,3 +444,84 @@ fruitbear = fruit; // fruit 객체 레퍼런스를 fruitbear에 할당
 fruit == fruitbear; // true
 fruit === fruitbear; // true
 ```
+
+# 클래스 기반 언어 대 프로토타입 기반 언어
+
+## Java 와 C++ 같은 클래스 기반 언어는 두개(클래스, 인스턴스)의 구별되는 개념에 기반을 두고 있다.
+
+1. 클래스: 특정한 객체의 특징들을 짓는 모든 속성들을 정의한다. 클래스는 특정 개체를 지정하는 것이 아닌 추상적인 개념이다. 자동차 클래스는 자동차등을 대표한다.
+
+2. 인스턴스: 클래스 기반으로 실체화 된 것이다. 부모 클래스와 동일한 속성을 가진다. 트럭은 특정 자동차를 나타내는 자동차 클래스의 인스턴스가 될 수 있다.
+
+그러나, 자바스크립트 같은 프로토타입기반의 언어는 위와 같이 클래스와 인스턴스를 구별하지 않는다. 간단한 객체들을 가질 뿐이다. 프로토타입 기반의 언어는 원형(프로토타입) 객체의 개념을 가지고 있다. 객체는 생성 또는 실행 시 자기 자신의 속성을 명시할 수 있다. 추가적으로, 객체들은 또다른 객체들을 생성하기 위한 프로토타입으로 연관지어 질 수 있다.
+
+## 하위 클래스와 상속
+
+자바스크립트는 생성자 함수와 프로토타입 객체를 연결해 상속을 구현한다.
+
+```javascript
+function Vehicle() {
+  this.wheels = 4;
+  this.doors = 4;
+}
+
+function SportsCar() {
+  Vehicle.call(this);
+  this.boosts = true;
+  this.doors = 2;
+}
+
+SportsCar.prototype = Object.create(Vehicle.prototype);
+
+function Bus() {
+  Vehicle.call(this);
+  this.wheels = 8;
+  this.doors = 2;
+}
+Bus.prototype = Object.create(Vehicle.prototype);
+```
+
+## 속성의 추가 삭제
+
+클래스 기반의 언어들은 클래스가 한번 정의된 후에 클래스를 다시 컴파일 하지 않는다면, 속성의 갯수나 형식을 변경할 수 없다. 그러나, 자바스크립트는 실행 시에 객체의 속성을 추가 혹은 삭제를 할 수 있다.
+
+# 객체 속성들
+
+## 속성 상속
+
+```javascript
+var mark = new WorkerBee();
+```
+
+new 연산자를 만나면, 자바스크립트는 새로운 일반 객체를 생성하고 암묵적으로 내부의 `[[prototype]](__proto__)`속성의 값을 `WorkerBee.prototype`의 값으로 할당하고, 해당 객체를 `this`키워드의 값으로써 생성자 함수 `WorkerBee`에 전달한다.
+
+# 객체 자신의 값과 상속받은 값
+
+## 객체의 속성에 접근할 때의 절차
+
+1. 해당 속성에 대한 객체 자신의 값이 있는지 확인한다.
+2. 객체 자신의 값이 없으면 `__proto__` 속성을 사용하여 프로토타입 체인을 확인한다.
+3. 프로토타입 체인상의 특정 개체가 해당 속성에 대한 값을 가지고 있으면 반환한다.
+4. 발견하지 못하면 해당 객체는 그 속성을 가지고 있지 않은 것으로 판단한다.
+
+```javascript
+function Employee() {
+  this.dept = "general";
+}
+Employee.prototype.name = "";
+
+function WorkerBee() {
+  this.projects = [];
+}
+WorkerBee.prototype = new Employee();
+
+var amy = new WorkerBee();
+
+Employee.prototype.name = "Unknown";
+```
+
+위의 코드의 경우 amy 객체의 이름 속성 값은 Unknown으로 바뀐다. 객체 생성 시에 객체의 속성에 대한 기본 값을 설정하고 실행 시에 해당 속성의 값을 변경하기를 원한다면, 생성자 함수 자체 내부가 아닌 **생성자의 프로토타입** 에 설정해야 한다.
+
+## 다중상속 금지
+
+자바스크립트는 다중 상속을 지원하지 않는다. 객체는 오로지 하나의 객체와 결합된 prototype만을 가지기 때문에 두개이상의 프로토타입 체인으로 상속을 할 수 없다.
