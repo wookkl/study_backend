@@ -4,5 +4,5 @@
 
 - [Javascript](./javascript)
 - [Django](./django)
-- [Certification](./certification)
+- [Authentication](./token_authentication)
 - [Security](./security)
