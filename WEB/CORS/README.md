@@ -18,7 +18,7 @@ SOP는 **잠재적으로 해로울 수 있는 문서를 분리**함으로써 **�
 
 ## Cors principle
 
-<img src="https://github.com/wookkl/study_backend/img/cors_principle.png" width="200px">
+<img src="../img/cors_principle.png" width="400px">
 
 # References
 

@@ -4,7 +4,7 @@
 
 ## 전통적인 인증 시스템
 
-<img src="https://github.com/wookkl/study_backend/img/tradition.jpg" width="200px">
+<img src="../img/tradition.jpg" width="400px">
 
 _출처: https://medium.com/@samueleresca/developing-token-authentication-using-asp-net-core-c3fbd7bfd7cb_
 
@@ -42,7 +42,7 @@ _출처: https://medium.com/@samueleresca/developing-token-authentication-using-
 
 토큰 인증 방식이란, 서버가 클라이언트에게 토큰을 발급하고 발급이후 모든 클라이언트의 요청 헤더에 토큰을 포함하여 요형하면 서버는 토큰으로 사용자 인증을 처리하고 응답하는 방식을 말한다. 전통적인 인증 방식은 세션에 유저의 정보를 저장해야 하지만, 토큰 인증 방식은 그럴 필요가 없다.
 
-<img src="https://github.com/wookkl/study_backend/img/token.jpg" width="200px">
+<img src="../img/token.jpg" width="400px">
 
 _출처: https://medium.com/@samueleresca/developing-token-authentication-using-asp-net-core-c3fbd7bfd7cb_
 
