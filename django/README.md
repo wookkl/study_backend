@@ -146,7 +146,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 """
 SECRET_KEY는 특정한 장고 설치를 위한 키이다. 암호화 서명을 제공하는데 사용되기도 하고, 유니크한 값으로 설정된다.
-프로젝트를 생성할때 자동으로 SECRET_KEY가 생성돈다. 키를 사용할 때  텍스트 또는 바이트라고 가정하면 안된다. 사용할 떈 꼭
+프로젝트를 생성할때 자동으로 SECRET_KEY가 생성된다. 키를 사용할 때 텍스트 또는 바이트라고 가정하면 안된다. 사용할 떈 꼭
 force_str() 또는 force_byte()해서 변환해야 한다. SECRET_KEY가 없으면 프로젝트는 실행되지 않는다.
 SECRET_KEY는 다음 경우에 사용된다.
 -  django.contrib.sessions.backends.cache 이외에 다른 백엔드 세션을 사용하거나, default인 get_session_auth_hash()메서드로 SHA-256 해싱할때의 모든 세션
@@ -170,7 +170,7 @@ ALLOWED_HOSTS = []
 
 """
 기본적으로 설치되아있는 앱들
-- django.contrib.admin 장고의 가장 큰 장점중에 admin interface
+- django.contrib.admin 장고의 가장 큰 장점중에 하나인 admin interface
 - django.contrib.auth 장고 인증 시스템
 - django.contrib.contenttypes 프로젝트에 설치된 모든 모델을 추적할 수 있음 높은 수준의 모델 작업에 인터페이스를 제공
 - django.contrib.sessions 익명 세션에 데이터를 저장하기 위한 프레임워크
