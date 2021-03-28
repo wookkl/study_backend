@@ -10,3 +10,7 @@
 ## 면접 질문들 모음
 
 - [Interview](./interview)
+
+## 책정리
+
+- [파이썬 코딩의 기술](.effective_python_2nd)
