@@ -1,14 +1,25 @@
 # 파이썬 면접 질문들
 
-## list / tuple / dict 의 차이점을 설명 해보세요.
+## list / tuple / dict / set 의 차이점을 설명 해보세요.
 
-## list / set / tuple의 메모리 접근 시간 복잡도를 말해보세요.
+- list: 순서가 존재, 가변형 객체, 인덱싱 슬라이싱 가능
+- tuple: 순서가 존재, 불변형 객체
+- dict: 키, 값으로 구성 중복불가
+- set: 키로 구성 중복불가
 
 ## dict의 데이터 넣을때와 충돌시 시간 복잡도를 말해보세요.
 
+- 최소 O(1) 최악: O(N)
+
 ## 정렬된 리스트에서 찾을때의 시간 / 정렬되지 않았을때의 시간을 말해보세요.
 
+- 정렬된 리스트라면 이분탐색을 사용하여 log N에 검색가능
+- 정렬되지 않았다면 N에 검색 가능
+
 ## django model에서의 select_related and prefetch_related 동작 방식을 말해보세요.
+
+- selected_related는 조인문이 생성된다
+- prefetch_related는 추가 쿼리사 발생한다.
 
 ## django에서 어떨때 inner join / outer join으로 나뉘는지 말해보세요.
 

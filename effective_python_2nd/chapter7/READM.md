@@ -241,3 +241,754 @@ class LockingCounter:
 - 여러 스레드 사이에서 프로그램의 불변 조건을 유지하려면 Lock클래스를 사용한다.
 
 ## 55. Queue를 사용해 스레드 사이에서 작업을 조율하라
+
+동시성 작업을 처리할 때 가장 유용한 방식은 함수 파이프라인이다.
+
+파이프라인은 순차적으로 실행해야 하는 여러 단계가 있고, 각 단계마다 실행할 구체적인 함수가 정해진다.작업은 매 단계 함수가 완료될 때마다 다음 단계로 전달되며, 더 이상 실행할 단계가 없을 때 끝난다.
+
+`queue` 내장 모듈에 있는 `Queue`는 새로운 데이터가 나타날 때까지 `get` 메서드가 블록되게 만들어서 작업자의 바쁜 대기 문제를 해결한다.
+
+큐에 입력 데이터가 들어오기를 기다리는 스레드를 하나 시작한다.
+
+```python
+from queue import Queue
+
+my_queue = Queue()
+
+
+def consumer():
+    print('소비자 대기')
+    my_queue.get()  # 다음에 보여줄 put()이 실행된 다음에 실행된다.
+    print('소비자 완료')
+
+
+thread = Thread(target=consumer)
+thread.start()
+
+print('생산자 데이터 추가')
+my_queue.put(object())  # get()이 실행되기전에 실행된다.
+print('생산자 완료')
+thread.join()
+
+```
+
+파이프라인 중간에 막히는 경우를 해결하기 위해 `Queue` 클래스에서는 두 단계 사이에 허용할 수 있는 미완성 작업의 최대 개수를 지정할 수 있다. 버퍼의 크기를 정하면 큐가 이미 가득 찬 경우 `put`이 블록된다.
+
+```python
+from queue import Queue
+from threading import Thread
+import time
+
+my_queue = Queue(1)
+
+
+def consumer():
+    time.sleep(0.1)  # 대기
+    my_queue.get()  # 두 번째로 실행
+    print('소비자 1')
+    my_queue.get()  # 네 번째로 실행
+    print('소비자 2')
+    print('소비자 완료')
+
+
+thread = Thread(target=consumer)
+thread.start()
+
+my_queue.put(object())  # 첫 번째로 실행
+print('생산자 1')
+my_queue.put(object())  # 세 번쨰로 실행
+print('생산자 2')
+print('생산자 완료')
+thread.join()
+```
+
+`Queue` 클래스의 `task_done` 메서드를 통해 작업의 진행을 추적할 수 있다. 이 메서드를 사용하면 어떤 단게의 입력 큐가 다 소진될 때까지 기다릴 수 있고, 파이프라인의 마지막 단계를 폴링할 필요도 없어진다.
+
+```python
+in_queue = Queue()
+def consumer():
+    print('소비자 대기')
+    work = in_queue.get() # 두 번째로 실행됨
+    print('소비자 작업 중')
+    ...
+    print('소비자 완료')
+    in_queue.task_done() # 세 번째로 실행됨
+
+thread = Thread(target=consumer)
+thread.start()
+"""
+생산자 코드가 소비자 스레드를 조인하거나 폴링할 필요가 없다. 생산자는 Queue 인스턴스의 join 메서드를 호출함으로써 in_queue가 끝나기를 기다릴 수 있다. in_queue가 비어 있더라도 지금까지 이 큐에 들어간 모든 원소에 대해 task_done이 호출되기 전까지는 join이 끝나지 않는다.
+"""
+print('생산자 데이터 추가')
+in_queue.put(object()) # 첫 번째로 실행됨
+print('생산자 대기')
+in_queue.join() # 네 번째로 실행됨
+print('생산자 완료')
+thread.join()
+
+```
+
+이 모든 동작을 `Queue` 하위 클래스에 넣고, 처리가 끝났음을 작업자 스레드에 알리는 기능을 추가할 수 있다. 큐에 더 이상 다른 입력이 없음을 표시하는 특별한 **센티넬** 원소를 추가하는 `close` 메서드를 정의한다.
+
+```python
+class ClosableQueue(Queue):
+    SENTINEL = object()
+
+
+    def close(self):
+        self.put(self.SENTINEL)
+
+    def __iter__(self):
+        while True:
+            item = self.get()
+            try:
+                if item is self.SENTINEL:
+                    return
+                yield item
+            finally:
+                self.task_done()
+```
+
+작업자 스레드가 `ClosableQueue` 클래스의 동작을 활용하게 할 수 있다.
+
+```python
+class StoppableWorker(Thread):
+    def __init__(self, func, in_queue, out_queue):
+        self.func = func
+        self.in_queue = in_queue
+        self.out_queue = out_queue
+
+    def run(self):
+        for item in self.in_queue:
+            result = self.func(item)
+            self.out_queue.put(result)
+```
+
+새 작업자 클래스를 사용해 작업자 스레드를 새로 정의한다.
+
+```python
+download_queue = ClosableQueue()
+resize_queue = ClosableQueue()
+upload_queue = ClosableQueue()
+done_queue = ClosableQueue()
+thread = [
+    StoppableWorker(download, download_queue, resize_queue),
+    StoppableWorker(resize, resize_queue, upload_queue),
+    StoppableWorker(uplaod, upload_queue, done_queue),
+]
+
+for thread in threads:
+    thread.start()
+for _ in range(1000):
+    download_queue.put(object())
+
+download_queue.close()
+download_queue.join()
+resize_queue.close()
+resize_queue.join()
+upload_queue.close()
+upload_queue.join()
+print(done_queue.qsize())
+
+for thread in threads:
+    thread.join()
+```
+
+### 정리
+
+- 순차적인 작업을 동시에 여러 파이썬 스레드에서 실행되도록 조직하고 싶을 때, 특히 I/O 위주의 프로그램인 경우라면 파이프라인이 매우 유용하다.
+- 동시성 파이프라인을 만들 때 발생할 수 있는 여러 가지 문제를 잘 알아준다.
+- `Queue` 클래스는 튼튼한 파이프라인을 구축할 때 필요한 기능인 블로킹 연산, 버퍼 크기 지정, `join을` 통한 완료 대기를 모두 제공한다.
+
+## 56. 언제 동시성이 필요할지 인식하는 방법을 알아두라
+
+프로그램이 다루는 영역이 커짐에 따라 복잡도도 증가한다. 프로그램의 명확성, 테스트 가능성, 효율성을 유지하면서 늘어나는 요구 조건을 만족시키는 것은 프로그래밍에서 가장 어려운 부분이다. 가장 처리하기 어려운 일은 단일 스레드 프로그래밍을 동시 실행되는 여러 흐름으로 이뤄진 프로그램으로 바꾸는 경우일 것이다.
+
+만약 기존의 프로그램에서 요구 사항이 바뀌어서 I/O(소켓 통신 등)가 필요하다면, I/O를 병렬로 수행해서 해결할 수 있다.
+각 작업 단위에 대해 동시 실행되는 여러 실행 흐름을 만들어내는 과정을 **팬아웃** 이라고 한다. 전체를 조율하는 프로세스 안에서 다음 단계로 진행하기 전에 동시 작업 단위의 작업이 모두 끝날 때까지 기다리는 과정을 **팬인** 이라고 한다.
+
+파이썬은 팬아웃과 팬인을 지원하는 여러 가지 내장 도구를 제공한다.
+
+### 정리
+
+- 프로그램이 커지면서 범위와 복잡도가 증가함에 따라 동시에 실행되는 여러 실행 흐름이 필요해지는 경우가 많다.
+- 동시성을 조율하는 가장 일반적인 방법으로는 팬아웃(새로운 동시성 단위들을 만들어냄)과 팬인(기존 동시성 단위들의 실행이 끝나기를 기다림)이 있다.
+- 파이썬은 팬아웃과 팬인을 구현하는 다양한 방법을 제공한다.
+
+## 57. 요구에 따라 팬아웃을 진행하려면 새로운 스레드를 생성하지 말라.
+
+병렬 I/O를 실행하고 싶을 때는 자연스레 스레드를 가장 먼저 고려하게 된다. 그러나, 여러 동시 실행흐름을 만들어내는 팬아웃을 수행하고자 스레드를 사용할 경우 중요한 단점과 마주하게 된다.
+
+여기서는 game_logic 안에서 I/O를 수행함으로써 생기는 지연시간을 해결한다.
+
+```python
+from threading import Lock
+
+
+ALIVE = '*'
+EMPTY = '-'
+
+
+class Grid:
+    ...
+
+
+class LockingGrid(Grid):
+    def __init__(self, height, width):
+        super().__init__(height, width)
+        self.lock = Lock()
+
+    def __str__(self):
+        with self.lock:
+            return super().__str__()
+
+    def get(self, y, x):
+        with self.lock:
+            return super().__get__(y, x)
+
+    def set(self, y, x, state):
+        with self.lock:
+            return super().set(y, x, state)
+```
+
+각 step_cell 호출마다 스레드를 정의해 **팬아웃** 하도록 simulate 함수를 정의한다. 스레드를 병렬로 실행되며, 다른 I/O가 끝날 때까지 기다리지 않아도 된다. 다음 세대로 진행하기 전에 모든 스레드가 작업을 마칠 때까지 기다리므로 **팬인** 할 수 있다.
+
+```python
+from threading import Thread
+
+
+def count_neighbors(y, x, get):
+    ...
+
+def game_logic(state, neighbors):
+    ...
+    # Blocking I/O
+    data = my_socket.recv(100)
+    ...
+
+def step_cell(y, x, get, set):
+    state = get(y, x)
+    neighbors = count_neighbors(y, x, get)
+    next_state = game_logic(state, neighbors)
+    set(y, x, next_state)
+
+def simulate_threaded(grid):
+    next_grid = LockingGrid(grid.height, grid.width)
+
+    threads = []
+    for y in range(grid.height):
+        for x in range(grid.width):
+            args = (y, x, grid.get, next_grid.set)
+            thread  = Thread(target=step_cell), args=args)
+            thread.start()
+            threads.append(thread)
+
+    for thread in threads:
+        thread.join()
+
+    return next_grad
+
+
+```
+
+스레드 사이에 I/O가 병렬화됐다. 하지만 이 코드에는 세 가지 문제점이 있다.
+
+1. Thread 인스턴스를 서로 안전하게 조율하려면 특별한 도구가 필요하다. 이로 인해 순차적인 단일 스레드보다 스레드를 사용하는 코드가 읽기 어렵다. 복잡도 때문에 시간이 지남에 따라 스레드를 사용한 코드를 확장하고 유지 보수하기도 더 어렵다.
+2. 스레드는 메모리를 많이 사용하며, 스레드 하나당 약 8MB가 더 필요하다.
+3. 스레드를 시작하는 비용이 비싸며, 컨텍스트 전환에 비용이 들기 때문에 스레드는 성능에 부정적인 영향을 미친다.
+
+지속적으로 새로운 동시성 함수를 시작하고 끝내야 하는 경우 스레드는 적절한 해법이 아니다. 파이썬은 이런 경우에 더 적합한 다른 해법을 제공한다.
+
+### 정리
+
+- 스레드는 많은 단점이 있다. 스레드를 시작하고 실행하는 데 비용이 들기 때문에 스레드가 많이 필요하면 상당히 많은 메모리를 사용한다. 그리고 스레드 사이를 조율하기 위해 Lock 과 같은 특별한 도구를 사용해야 한다.
+- 스레드를 시작하거나 스레드가 종료하기를 기다리는 코드에게 스레드 실행중에 발행한 예외를 돌려주는 파이썬 내장 기능은 없다. 이로 인해 스레드 디버깅이 어렵다.
+
+## 58. 동시성과 Queue를 사용하기 위해 코드를 어떻게 리팩터링 하는지 이해하라.
+
+queue 내장 모듈의 Queue 클래스를 사용해 파이프라인을 스레드로 실행하게 구현하는 것이다. 일반적인 접근 방법은 필요한 병렬 I/O의 숫자에 맞춰 미리 정해진 작업자 스레드를 만든다. 프로그램은 이를 통해 자원 사용을 제어하고, 새로운 스레드를 자주 시작하면서 생기는 부가 비용을 덜 수 있다.
+
+```python
+from queue import Queue
+
+class ClosableQueue(Queue):
+    ...
+
+in_queue = ClosableQueue()
+out_queue = ClosableQueue()
+```
+
+in_queue에서 원소를 소비하는 스레드를 여러 개 시작할 수 있다. 각 스레드는 game_logic을 호출해 원소를 처리한 다음 out_queue 에 결과를 넣는다. 각 스레드는 동시에 실행되며 병력적으로 I/O를 수행하므로, 필요한 지연 시간이 줄어든다.
+
+```python
+from threading import Thread
+
+
+class StoppableWorker(Thread):
+    ...
+
+def game_logic(state, neighbors):
+    ...
+    # Blocking I/O
+    data = my_socket.recv(100)
+    ...
+
+def game_logic_thread(item):
+    y, x, state, neighbors = item
+    try:
+        next_state = game_logic(state, neighbors)
+    except Exception as e:
+        next_state = e
+    return (y, x, next_state)
+
+# 스레드를 미리 시작한다.
+
+threads = []
+
+for _ in range(5):
+    thread = StoppableWorker(
+        game_logic_thread, in_queue, out_queue)
+    thread.start()
+    threads.append(thread)
+```
+
+이제 큐와 상호작용하면서 상태 전이 정보를 요청하고 응답을 받도록 simulate 함수를 재정의할 수 있다. 원소를 in_queue에 추가하는 과정은 **팬아웃** 이고, out_queue 가 빈 큐가 될 때까지 원소를 소비하는 과정은 **팬인** 이다.
+
+```python
+ALIVE = '*'
+EMPTY = '-'
+
+
+class SimulationError(Exception):
+    pass
+
+
+class Grid:
+    ...
+
+def count_neighbors(y, x, get):
+    ..
+
+def simulate_pipeline(grid, in_queue, out_queue):
+    for y in range(grid.height):
+        for x in range(grid.width):
+            state = grid.get(y, x)
+            neighbors = count_neighbors(y, x, grid.get)
+            in_queue.put((y, x, state, neighbors))
+    in_queue.join()
+    out_queue.close()
+    next_grid = Grid(grid.height, grid.width)
+    for item in out_queue:
+        y, x, next_state = item
+        if isinstance(next_state, Exception):
+            raise SimulationError(y, x) from next_state
+        next_grid.set(y, x, next_state)
+
+    return next_grid
+```
+
+Grid.get과 Grid.set 호출은 모두 새로운 simulate_pipline 함수 안에서만 일어난다. 이는 동기화를 위해 Lock인스턴스를 사용하는 Grid 구현을 새로 만드는 대신에 기존의 단일 스레드 구현을 쓸 수 있다는 뜻이다.
+
+메모리를 폭팔적으로 사용하는 문제, (스레드) 시작 비용, 스레드를 디버깅하는 문제 등은 해결했지만, 여전히 많은 문제가 남아있다.
+
+- simulate_pipeline 함수가 따라가기 어렵다.
+- 코드의 가독성을 개선하려면 ClosableQueue와 StoppableWorker 라는 추가 지원 클래스가 필요하며, 복잡도가 늘어난다.
+- 병렬성을 활용해 필요에 따라 자동으로 시스템 규모가 확장되지 않는다. 미리 부하는 예측해서 잠재적인 병렬성 수준을 미리 지정해야 한다.
+- 디버깅을 활성화하려면 발생한 예외를 작업 스레드에서 수동으로 잡아 Queue 를 통해 전달함으로써 주 스레드에서 다시 발생사켜줘야 한다.
+
+하지만 가장 큰 문제점은 요구 사항이 변경될 떄 드러난다. count_neighbors 함수에서도 I/O를 수행해야 한다고 가정한다면,
+
+```python
+def count_neighbors(y, x, get):
+    ...
+    #Blocking I/O
+    data = my_socket.recv(100)
+    ...
+
+```
+
+이 코드를 병렬화하려면 count_neighbors를 별도의 스레드에서 실행하는 단계를 파이프라인에 추가해야 한다. 작업자 스레드 사이의 동기화를 위해 Grid 클래스에 대해 Lock을 사용해야 한다.
+
+```python
+def count_neighbors_thread(item):
+    y, x, sate, get = item
+    try:
+        neighbors = count_neighbors(y, x, get)
+    except Exception as e:
+        neighbors = e
+    return (y, x, state, neighbors)
+
+
+def game_logic_thread(item):
+    y, x, state, neighbors = item
+    if isinstance(neighbors, Exception):
+        next_state = neighbors
+    else:
+        try:
+            next_state = game_logic(state, neighbors)
+        except Exception as e:
+            next_state = e
+    return (y, x, next_state)
+
+
+class LockingGrid(Grid):
+    ...
+```
+
+count_neighbors_thread 작업자와 그에 해당하는 Thread 인스턴스를 위해 또 다른 Queue 인스턴스 집합을 만들어야 한다.
+
+```python
+in_queue = ClosableQueue()
+logic_queue = ClosableQueue()
+out_queue = ClosableQueue()
+
+threads = []
+for _ in range(5):
+    thread = StoppableWorker(
+        count_neighbors_thread, in_queue, logic_queue)
+    thread.start()
+    threads.append(thread)
+
+
+for _ in range(5):
+    thread = StoppableWorker(
+        game_logic_thread, logic_queue, out_queue)
+    thread.start()
+    threads.append(thread)
+
+def simulate_phased_pipeline(
+    grid, in_queue, logic_queue, out_queue):
+    for y in range(grid.height):
+        for x in range(grid.width):
+            state = grid.get(y, x)
+            item = (y, x, state, grid.get)
+            in_queue.put(item) # 팬 아웃
+
+    in_queue.join()
+    logic_queue.join()
+    out_queue.close()
+
+    next_grid = LockingGrid(grid.height, grid.width)
+    for item in out_queue:
+        y, x, next_state = item
+        if isinstance(next_state, Exception):
+            raise SimulationError(y, x) from next_state
+        next_grid.set(y, x, next_state)
+
+    return next_grid
+```
+
+### 정리
+
+- 작업자 스레드 수를 고정하고 Queue와 함께 사용하면 스레드를 사용할 때 팬인과 팬아웃의 규모 확장성을 개선할 수 있다.
+- Queue를 사용하도록 기존 코드를 리팩터링하려면 상당히 많은 작업이 필요하다. 특히 다단계로 이뤄진 파이프라인이 필요하면 작업량이 더 늘어난다.
+- 다른 파이썬 내장 기능이나 모듈이 제공하는 병렬 I/O를 가능하게 해주는 다른 기능과 비교하면, Queue 라는 프로그램이 활용할 수 있는 전체 I/O 병렬성의 정도를 제한한다는 단점이 있다.
+
+## 59. 동시성을 위해 스레드가 필요한 경우에는 ThreadPoolExecuter를 사용하라
+
+Grid의 각 셀에 대해 새 Thread 인스턴스를 시작하는 대신, 함수를 실행기(executor)에 제출함으로써 **팬아웃** 할 수 있다. 실행기는 제출받은 함수를 별도의 스레드에서 수행해준다.
+
+실행기는 사용할 스레드를 미리 할당한다. 따라서 simulate_pool 을 실행할 때마다 스레드를 시작하는 데 필요한 비용이 들지 않는다. 또한, 스레드 풀에 사용할 스레드의 최대 개수를 지정할 수도 있다.
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+
+def simulate_pool(pool, grid):
+    next_grid = LockingGrid(grid.height, grid.width)
+    futures = []
+    for y in range(grid.height):
+        for x in range(grid.width):
+            args = (y, x, grid.get, next_grid.set)
+            future = pool.submit(step_cell, *args) # 팬아웃
+            futures.append(future)
+
+    for future in futures:
+        future.result() # 팬인
+
+    return next_grid
+
+with ThreadPoolExecutor(max_workers=10) as pool:
+    for i in range(5):
+        grid = simulate_pool(pool, grid)
+```
+
+ThreadPoolExecutor 클래스에서 가장 좋은 점은 submit 메서드가 반환하는 Future 인스턴스에 대해 result 메서드를 호출하면 스레드를 실행하는 중에 발생한 예외를 자동으로 전파해준다. 하지만, ThreadPoolExecutor 가 제한된 수의 I/O 병렬성만 제공한다는 큰 문제점이 남아 있다. 비동기적인 해법이 존재하지 않는 상황을 처리할 때는 좋은 방법이다.
+
+### 정리
+
+- ThreadPoolExecutor 를 사용하면 한정된 리팩터링만으로 간단한 I/O 병렬성을 활성화할 수 있다. 동시성을 팬아웃해야 하는 경우에 발생하는 스레드 시작 비용을 쉽게 줄일 수 있다.
+- ThreadPoolExecutor 를 사용하면 스레드를 직접 사용할 때 발생할 수 있는 잠재적인 메모리 낭비 문제를 없애주지만 max_worker의 개수를 미리 지정해야 하므로 I/O 병렬성을 제한한다.
+
+## 60. I/O를 할 때는 코루틴을 사용해 동시성을 높여라
+
+파이썬은 높은 I/O 동시성을 처리하기 위해 **코루틴** 을 사용한다. 코루틴을 사용하면 파이썬 프로그램 안에서 동시에 실행되는 것처럼 보이는 함수를 아주 많이 쓸 수 있다. 코루틴은 async 와 await 키워드를 사용해 구현되며, 제너레이터를 실행하기 위한 인프라를 사용한다.
+
+코루틴을 시작하는 비용은 함수 호출뿐이다. 활성화된 코루틴은 종료될 떄까지 1KB 미만의 메모리를 사용한다. 스레드와 마찬가지로 코루틴도 환경으로부터 입력을 소비하고 결과를 출력할 수 있는 독립적인 함수다.
+코루틴은 매 await 식에서 일시 중단되고 일시 중단된 **대기 가능성** 이 해결된 다음에 async 함수로부터 실행을 재개한다는 차이점이 있다. 여러 분리된 async 함수가 서로 장단을 맞춰 실행되면 마치 모든 async 함수가 동시에 실행되는 것처럼 보아며, 이를 통해 파이썬 스레드의 동시성 동작을 흉내낼 수 있다.
+부가 비용, 시작 비용, 컨텍스트 전환 비용이 들지 않고 복잡한 락과 동기화 코드가 필요하지 않다.
+
+코루틴을 가능하게 하는 매커니즘은 **이벤트 루프** 로 다수의 I/O를 효율적으로 동시에 실행할 수 있다.
+
+코루틴을 사용해 생명 게임을 구현한다.
+
+```python
+ALIVE = '*'
+EMPTY = '-'
+
+class Grid:
+    ...
+
+def count_neighbors(y, x, get):
+    ...
+
+async def game_logic(state, neighbors):
+    ...
+    # 여기서 I/O를 수행
+    data = await my_socket.read(50)
+    ...
+
+async def step_cell(y, x, get, set):
+    state = get(y, x)
+    neighbors = count_neighbors(y, x, get)
+    next_state = await game_logic(state, neighbors)
+    set(y, x, next_state)
+
+import asyncio
+
+async def simulate(grid):
+    next_grid = Grid(grid.height, grid.width)
+
+    tasks = []
+
+    for y in range(grid.height):
+        for x in range(grid.width):
+            task = step_cell(
+                y, x, grid.get, next_grid.set) # 한번에 처리하기 위해 await을 안씀
+            tasks.append(task)
+
+    await asyncio.gather(*task) # 여기서 사용
+
+"""
+- step_cell을 호출해도 이 함수가 즉시 호출하지 않고 await 식에서 사용될 수 있는 coroutine 인스턴스를 반환 (마치 yield를 사용하는 제너레이터 함수를 호출하면 즉시 실행되지 않고 제너레이터를 반환하는 것과 비슷) 이와같은 실행 연기 메커니즘이 팬아웃을 수행
+- asyncio 내장 라이브러리가 제공하는 gather gkatnsms 팬인을 수행 gather에 대해 적용한 await식은 이벤트 루프가 step_cell 코루틴을 동시에 실행하면서 완료될 떄마다 simulate 코루틴 실행을 재개하라고 요청
+- 모든 실행이 단일 스레드에서 이뤄지므로 Grid 인스턴스 락을 사용할 필요가 없다. I/O는 asyncio가 제공하는 이벤트 루프의 일부분으로 병렬화된다.
+"""
+```
+
+새로운 코드는 asyncio.run 함수를 사용해 simulate 코루틴을 이벤트 루프상에서 실행하고 각 함수가 의존하는 I/O를 수행한다.
+
+```python
+for i in range(5):
+    grid = asyincio.run(simulate(grid))
+
+```
+
+### 정리
+
+- async 키워드로 정의한 함수를 코루틴이라고 부른다. 코루틴을 호출하는 호출자는 await 키워드를 사용해 자신이 의존하는 코루틴의 결과를 받을 수 있다.
+- 코루틴은 수만 개의 함수가 동시에 실행되는 것처럼 보이게 만드는 효과적인 방법을 제공한다.
+- I/O를 병렬화하면서 스레드로 I/O를 수행할 때 발생할 수 있는 문제를 극복하기 위해 팬인과 팬아웃에 코루틴을 사용할 수 있다.
+
+## 61. 스레드를 사용한 I/O를 어떻게 asyncio로 포팅할 수 있는지 알아두라
+
+숫자를 추측하는 게임을 실행해주는 TCP 기반의 서버를 구축한다면, 이런 유형의 클라이언트/서버 시스템을 구축하는 가장 일반적인 방법은 블로킹 I/O와 스레드를 사용하는 것이다.
+
+```python
+class EOFError(Exception):
+    pass
+
+
+class ConnectionBase:
+    def __init__(self, connection):
+        self.connection = connection
+        self.file = self.connection.makefile('rb')
+
+    def send(self, command):
+        line = command + '\n'
+        data = line.encode()
+        self.connection.send(data)
+
+
+    def receive(self):
+        line = self.file.readline()
+        if not line:
+            raise EOFError('Connection closed')
+        retturn line[:-1].decode()
+```
+
+서버는 한 번에 하나씩 연결을 처리하고 클라이언트의 세션 상태를 유지하는 클래스로 구현된다.
+
+```python
+import random
+
+
+WARMER = '더따뜻함'
+COLDER = '더차가움'
+UNSURE = '잘모르겠음'
+CORRECT = '맞음'
+
+
+class UnknownCommandError(Exception):
+    pass
+
+
+class Session(ConnectionBase):
+    def __init__(self, *args):
+        super().__init__(*args)
+        self._clear_state(None, None)
+
+
+    def _clear_state(self, lower, upper):
+        self.lower = lower
+        self.upper = upper
+        self.secret = None
+        self.guesses = []
+
+    def loop(self):
+        """
+        클라이언트에서 들어오는 메세지를 처리해 명령에 맞는 메서드를 호출해준다.
+        """
+        while command:= self.receive():
+            parts = command.split(' ')
+            if parts[0] == 'PARAMS':
+                self.set_params(parts)
+            elif parts[0] == 'NUMBER':
+                self.send_number()
+            elif parts[0] == 'REPORT':
+                self.receive_report(parts)
+            else:
+                raise UnknownCommandError(command)
+
+    def set_params(self, parts):
+        """
+        서버가 추측할 값의 상한과 하한을 설정
+        """
+        assert len(parts) == 3
+        lower = int(parts[1])
+        upper = int(parts[2])
+        self._clear_state(lower, upper)
+
+    def next_guess(self):
+        """
+        클라이언트에 해당하는 Session 인스턴스에 저장된 이전 상태를 바탕으로 새로운 수를 추축
+        """
+        if self.secret is not None:
+            return self.secret
+
+        while True:
+            guess = random.randint(self.lower, self.upper)
+            if guess not in self.guesses:
+                return guess
+
+    def send_number(self):
+        guess = self.next_guess()
+        self.guesses.append(guess)
+        self.send(format(guess))
+
+
+    def receive_repoert(self, parts):
+        assert len(parts) == 2
+        decision = parts[1]
+        last = self.guesses[-1]
+        if decision == CORRECT:
+            self.secret = last
+
+        print(f'서버: {last}는 {decision}')
+
+```
+
+클라이언트도 상태가 있는 클래스를 사용해 구현된다.
+
+```python
+import contextlib
+import math
+
+
+class Client(ConnectionBase):
+    def __init__(self, *args):
+        super().__init__(*args):
+        self._clear_state()
+
+    def _clear_state(self):
+        self.secret = None
+        self.last_distance = None
+
+    @contextlib.contextmanager
+    def session(self, lower, upper, secret):
+        """
+        첫 번째 명령을 서버에게 보낸다.
+        """
+        print(f'\n{lower}와 {upper} 사이의 숫자를 맞춰보세요!'
+              f' 쉿! 그 숫자는 {secret} 입니다.')
+        self.secret = secret
+        self.send(f'PARAMS {lower} {upper}')
+        try:
+            yield
+        finally:
+            self._clear_state()
+            self.send('PARAMS 0 -1')
+
+    def request_numbers(self, count):
+        """
+        새로운 추측을 서버에게 요청한다.
+        """
+        for _ in range(count):
+            self.send('NUMBER')
+            data = self.recieve()
+            yield int(data)
+        if self.last_distance == 0:
+            return
+
+    def report_outcome(self, number):
+        """
+        서버가 돌려준 추측이 마지막으로 결과를 알려준 추측보다 더 차갑거나 따뜻한지를 알려준다.
+        """
+        new_distance = math.fabs(number - self.secret)
+        decision = UNSURE
+
+        if new_distance == 0:
+            dicision = CORRECT
+        elif self.last_distance is None:
+            pass
+        elif new_distance < self.last_distance:
+            decision = WARMER
+        elif new_distance > self.last_distance:
+            decision = COLDER
+
+        self.last_distance = new_distance
+
+        self.send(f'REPORT {decision}')
+        return decision
+```
+
+소켓에 리슨하는 스레드를 하나 사용하고 새 연결이 들어올 때마다 스레드를 추가로 시작하는 방식으로 서버를 실행한다.
+
+```python
+import socket
+from threading import Thread
+
+
+def handle_connection(connection):
+    """
+    서버 핸들링
+    """
+    with connection:
+        session = Session(connection)
+        try:
+            session.loop()
+        except EOFError:
+            pass
+
+
+def run_server(address):
+    with socket.socket() as listener:
+        listener.bind(address)
+        listener.listen()
+        while True:
+            connection, _ = listener.accept()
+            thread = Thread(target=handle_connection,
+                            args=(connection,),
+                            daemon=True)
+            thread.start()
+```
