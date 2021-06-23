@@ -24,24 +24,21 @@ prefetch_related는 +1 query를 의도한다.
 ```
 
 select_relatd 또는 prefetch_related 없는 쿼리셋에서 join 또는 + 1 query가 발생했다면
-명시적으로라도 selected_related 와 prefetch_relavted를 붙여주는 것이 좋다.
+명시적으로라도 selected_related 와 prefetch_related를 붙여주는 것이 좋다.
 
 ```python
 company_qs: QuerySet = Company.objects.prefetch_related(
     'product_set').filter(name='company_name')
+
+company_list: List[Company] = list(company_qs)
+
 ```
 
 ```sql
 SELECT "app_company"."id", "app_company"."name"
     FROM "app_company"
         WHERE "app_company"."name" = "company_name1";
-```
 
-```python
-company_list: List[Company] = list(company_qs)
-```
-
-```sql
 SELECT "app_company"."name"
     FROM "app_company"
         WHERE "app_product"."product_owned_company_id" IN (1, 21);
