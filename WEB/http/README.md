@@ -62,3 +62,92 @@ key는 HOST 이고 value는 google.com 이다.
 ## Body
 
 HTTP 요청 메시지에서 body 부분은 HTTP 요청이 전송하는 데이터를 담고 있는 부분이다. 전송하는 데이터가 없다면 body 부분은 비어 있다.
+
+# HTTP 응답 구조
+
+HTTP 응답 메시지의 구조도 요청 메시지와 마찬가지로 크게 세 부분으로 구성되어 있다.
+
+1. Status Line
+2. Headers
+3. Body
+
+## Status Line
+
+HTTP 응답 메시지의 상태를 간략하게 요약하여 알려주는 부분이다.
+세 부분으로 구성되어 있다.
+`HTTP/1.1 404 Not Found`
+
+1. HTTP Version: HTTP 버전을 나타낸다.
+2. Status Code: HTTP 응답 상태를 미리 지정되어 있는 숫자로 된 코드로 나타내준다.
+3. Status Text: HTTP 응답 상태를 간략하개 글로 설명해주는 부분이다.
+
+## 헤더
+
+HTTP 응답의 헤더 부분은 HTTP 요청의 헤더 부분과 동일하다. 다만 HTTP 응답에서만 사용되는 헤더 값들이 있다.
+
+## Body
+
+HTTP 응답 메시지의 body도 HTTP 요청 메시지의 body와 동일하다.
+
+# 자주 사용되는 HTTP 메소드
+
+## GET
+
+POST 메소드와 함께 가장 자주 사용되는 HTTP 메소드이다. 어떠한 데이터를 서버로부터 요청할 때 주로 사용하는 메소드이다.
+
+## POST
+
+GET 메소드와 함께 가장 자주 사용되는 메소드다. 데이터를 생성하거나 수정 및 삭제 요청을 할 때 주로 사용되는 메소드다.
+
+## OPTIONS
+
+OPTIONS 메소드는 주로 특정 엔드포인트에서 허용되는 메소드들이 무엇이 있는 지 알고자 하는 요청에서 사용되는 HTTP 메소드다. 엔드포인트는 허용하는 HTTP 메소드가 지정되도록 되어 있으며, 허용하지 않는 HTTP 메소드의 요쳥이 들어오면 405 Method Not Allowed 응답을 보내게 된다.
+
+엔드포인트가 어떠한 HTRP 메소드 요청을 허용하는지 알고자 할 때 OPTIONS 요청을 보내게 된다.
+
+```
+HTTP/1.0 200 OK
+Allow: GET, HEAD, OPTIONS
+Content-Length: 0
+Content-Type: text/html; charset=utf-8
+Date: Fri, 28, Jun 2021 12:23:18 KST
+Server: Werkzeug/0.14.1 Python/3.8.0
+```
+
+## PUT
+
+POST 메소드와 비슷한 의미를 가지고 있는 메소드다. POST와 중복되는 의미이므로 데이터를 새로 생성하는 HTTP 요청을 보낼 때 굳이 PUT을 사용하지 않고 모든 데이터 생성 및 수정 관련한 요청은 다 POST로 통일해서 사용하는 시스템이 많아지고 있다.
+
+## DELETE
+
+데이터 삭제 요청을 보낼 떄 사용되는 메소드다.
+
+# 자주 사용되는 HTTP Status Code와 Text
+
+## 200 OK
+
+HTTP 요청이 문제없이 성공적으로 잘 처리되었 때 보내는 status code다.
+
+## 301 Method Permanently
+
+요청을 보낸 엔드포인트의 URL 주소가 바뀌었다는 것을 나타내는 status code다.
+
+## 400 Bad Request
+
+HTTP 요청이 잘못된 요청일 떄 보내는 응답 코드다.
+
+## 401 Unauthorized
+
+HTTP 요청을 처리하기 위해서는 해당 요청을 보내는 주체의 신분 확인이 요구되나 확인할 수 없었을 떄 보내는 응답 코드다.
+
+## 403 Forbidden
+
+HTTP 요청을 보내는 주체가 해당 요청에 대한 권한이 없음을 나타내는 응답 코드다.
+
+## 404 Not Found
+
+HTTP 요청을 보내고자 하는 URI가 존재하지 않을 떄 보내는 응답 코드다.
+
+## 500 Internal Server Error
+
+내부 서버에 오류가 발생했다는 것을 알려주는 응답 코드다.
