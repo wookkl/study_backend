@@ -18,7 +18,7 @@
 
 ## 가상화
 
-![https://s3-us-west-2.amazonaws.com/secure.notion-static.com/50828aeb-3015-4de9-a2c9-11cb88aea169/virtualization.png](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/50828aeb-3015-4de9-a2c9-11cb88aea169/virtualization.png)
+![virtualization.png](../img/virtualization.png)
 
 하이퍼바이저는? 호스트 시스템에서 다수의 게스트 OS를 구동할 수 있게 하는 소프트웨어. 중간 관리자 역할을 하는 것!(비슷한 역할을 하는 것이 컨테이너 엔진 <도커 엔진>)
 
